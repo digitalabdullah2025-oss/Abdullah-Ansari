@@ -1,0 +1,318 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Authenticated platform user profile with private contact details and role.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "email": { "type": "string", "format": "email", "maxLength": 254 },
+        "phone": { "type": "string", "maxLength": 20 },
+        "photoURL": { "type": "string", "maxLength": 500 },
+        "role": { "type": "string", "enum": ["customer", "professional", "admin"] },
+        "defaultAddress": { "type": "string", "maxLength": 300 },
+        "defaultCity": { "type": "string", "maxLength": 80 },
+        "defaultLat": { "type": "number" },
+        "defaultLng": { "type": "number" },
+        "isBlocked": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "displayName", "role", "isBlocked", "createdAt", "updatedAt"]
+    },
+    "Admin": {
+      "title": "Admin",
+      "description": "Authorized administrator registry entry.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "email": { "type": "string", "format": "email", "maxLength": 254 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "createdAt"]
+    },
+    "ServiceCategory": {
+      "title": "ServiceCategory",
+      "description": "Home repair service category with base pricing metadata.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "minLength": 2, "maxLength": 80 },
+        "description": { "type": "string", "maxLength": 400 },
+        "iconName": { "type": "string", "maxLength": 40 },
+        "baseInspectionFee": { "type": "number" },
+        "minEstimate": { "type": "number" },
+        "maxEstimate": { "type": "number" },
+        "isEmergencyEligible": { "type": "boolean" },
+        "isActive": { "type": "boolean" },
+        "sortOrder": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "iconName", "baseInspectionFee", "minEstimate", "maxEstimate", "isActive", "updatedAt"]
+    },
+    "PricingItem": {
+      "title": "PricingItem",
+      "description": "Transparent rate card item for a service category.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "categoryId": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "title": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "description": { "type": "string", "maxLength": 300 },
+        "inspectionFee": { "type": "number" },
+        "minPrice": { "type": "number" },
+        "maxPrice": { "type": "number" },
+        "priceType": { "type": "string", "enum": ["fixed_range", "inspection_based"] },
+        "materialNote": { "type": "string", "maxLength": 200 },
+        "isActive": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "categoryId", "title", "inspectionFee", "minPrice", "maxPrice", "priceType", "isActive", "updatedAt"]
+    },
+    "Offer": {
+      "title": "Offer",
+      "description": "Promotional discount offer managed by Admin.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "title": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "code": { "type": "string", "minLength": 2, "maxLength": 30 },
+        "discountAmount": { "type": "number" },
+        "discountLabel": { "type": "string", "maxLength": 60 },
+        "categoryId": { "type": "string", "maxLength": 64 },
+        "isActive": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "title", "code", "discountAmount", "discountLabel", "isActive", "updatedAt"]
+    },
+    "Professional": {
+      "title": "Professional",
+      "description": "Public directory profile, availability status, and real-time GPS location (when online & sharing) for a service professional.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "fullName": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "photoURL": { "type": "string", "maxLength": 500 },
+        "categoryId": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "categoryName": { "type": "string", "minLength": 2, "maxLength": 80 },
+        "skills": { "type": "array", "items": { "type": "string" } },
+        "experienceYears": { "type": "number" },
+        "serviceArea": { "type": "string", "minLength": 2, "maxLength": 160 },
+        "workingHours": { "type": "string", "maxLength": 80 },
+        "inspectionCharge": { "type": "number" },
+        "hourlyRate": { "type": "number" },
+        "bio": { "type": "string", "maxLength": 600 },
+        "verificationStatus": { "type": "string", "enum": ["pending", "verified", "rejected"] },
+        "isVerified": { "type": "boolean" },
+        "isBlocked": { "type": "boolean" },
+        "availabilityStatus": { "type": "string", "enum": ["Available Now", "Busy", "Offline", "On Another Job"] },
+        "isOnline": { "type": "boolean" },
+        "isSharingLocation": { "type": "boolean" },
+        "lat": { "type": "number" },
+        "lng": { "type": "number" },
+        "ratingAvg": { "type": "number" },
+        "reviewCount": { "type": "number" },
+        "completedJobs": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "fullName", "categoryId", "categoryName", "experienceYears", "serviceArea", "inspectionCharge", "verificationStatus", "isVerified", "isBlocked", "availabilityStatus", "isOnline", "isSharingLocation", "createdAt", "updatedAt"]
+    },
+    "ProfessionalPrivate": {
+      "title": "ProfessionalPrivate",
+      "description": "Private KYC and contact information for a service professional (isolated from public directory).",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "phone": { "type": "string", "minLength": 6, "maxLength": 20 },
+        "govIdType": { "type": "string", "enum": ["Aadhaar", "PAN", "Driving License", "Voter ID"] },
+        "govIdLast4": { "type": "string", "minLength": 4, "maxLength": 12 },
+        "govIdNote": { "type": "string", "maxLength": 200 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "phone", "govIdType", "govIdLast4", "updatedAt"]
+    },
+    "Booking": {
+      "title": "Booking",
+      "description": "Home repair booking connecting a customer and a service professional with transparent pricing and live tracking.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "customerId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "customerName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "customerPhone": { "type": "string", "maxLength": 20 },
+        "professionalId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "professionalName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "professionalPhoto": { "type": "string", "maxLength": 500 },
+        "categoryId": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "categoryName": { "type": "string", "maxLength": 80 },
+        "issueTitle": { "type": "string", "minLength": 2, "maxLength": 160 },
+        "issueDescription": { "type": "string", "maxLength": 1200 },
+        "issueMediaNames": { "type": "array", "items": { "type": "string" } },
+        "address": { "type": "string", "minLength": 3, "maxLength": 300 },
+        "lat": { "type": "number" },
+        "lng": { "type": "number" },
+        "scheduledDate": { "type": "string", "maxLength": 40 },
+        "scheduledSlot": { "type": "string", "maxLength": 60 },
+        "isEmergency": { "type": "boolean" },
+        "status": { "type": "string", "enum": ["Request Sent", "Accepted", "On The Way", "Arrived", "Work Started", "Completed", "Cancelled", "Rejected"] },
+        "inspectionFee": { "type": "number" },
+        "estimatedLabour": { "type": "number" },
+        "estimatedMaterial": { "type": "number" },
+        "totalEstimated": { "type": "number" },
+        "finalAmount": { "type": "number" },
+        "paymentMethod": { "type": "string", "enum": ["Cash", "UPI", "Online"] },
+        "paymentStatus": { "type": "string", "enum": ["Pending", "Awaiting Verification", "Paid", "Refunded", "Failed"] },
+        "invoiceNumber": { "type": "string", "maxLength": 40 },
+        "proLat": { "type": "number" },
+        "proLng": { "type": "number" },
+        "isProSharingLocation": { "type": "boolean" },
+        "hasReview": { "type": "boolean" },
+        "cancellationReason": { "type": "string", "maxLength": 300 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "customerId", "customerName", "professionalId", "professionalName", "categoryId", "categoryName", "issueTitle", "address", "lat", "lng", "scheduledDate", "scheduledSlot", "isEmergency", "status", "inspectionFee", "totalEstimated", "paymentMethod", "paymentStatus", "isProSharingLocation", "hasReview", "createdAt", "updatedAt"]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "Booking-scoped text message between customer and assigned professional.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "bookingId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "senderId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "senderName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "senderRole": { "type": "string", "enum": ["customer", "professional", "admin"] },
+        "text": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "bookingId", "senderId", "senderName", "senderRole", "text", "createdAt"]
+    },
+    "Review": {
+      "title": "Review",
+      "description": "Verified customer rating and review tied to a completed booking.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "bookingId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "customerId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "customerName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "professionalId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "categoryId": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "rating": { "type": "number" },
+        "comment": { "type": "string", "maxLength": 800 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "bookingId", "customerId", "customerName", "professionalId", "categoryId", "rating", "comment", "createdAt"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "User-scoped in-app notification for booking events.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "body": { "type": "string", "minLength": 1, "maxLength": 400 },
+        "type": { "type": "string", "enum": ["booking_request", "booking_accepted", "booking_rejected", "on_the_way", "arrived", "completed", "cancelled", "system"] },
+        "bookingId": { "type": "string", "maxLength": 128 },
+        "isRead": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "title", "body", "type", "isRead", "createdAt"]
+    },
+    "Complaint": {
+      "title": "Complaint",
+      "description": "Customer complaint or issue report linked to a booking.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "bookingId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "customerId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "customerName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "professionalId": { "type": "string", "maxLength": 128 },
+        "subject": { "type": "string", "minLength": 2, "maxLength": 160 },
+        "description": { "type": "string", "minLength": 5, "maxLength": 1000 },
+        "status": { "type": "string", "enum": ["Open", "In Review", "Resolved"] },
+        "adminNote": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "bookingId", "customerId", "customerName", "subject", "description", "status", "createdAt", "updatedAt"]
+    },
+    "Payment": {
+      "title": "Payment",
+      "description": "Payment and refund record linked to a booking.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "bookingId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "customerId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "professionalId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "amount": { "type": "number" },
+        "method": { "type": "string", "enum": ["Cash", "UPI", "Online"] },
+        "status": { "type": "string", "enum": ["Pending", "Awaiting Verification", "Paid", "Refund Requested", "Refunded"] },
+        "invoiceNumber": { "type": "string", "maxLength": 40 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "bookingId", "customerId", "professionalId", "amount", "method", "status", "invoiceNumber", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Private user account profiles (PII protected)."
+    },
+    "/admins/{userId}": {
+      "schema": { "$ref": "#/entities/Admin" },
+      "description": "Authorized platform administrators."
+    },
+    "/serviceCategories/{categoryId}": {
+      "schema": { "$ref": "#/entities/ServiceCategory" },
+      "description": "Managed home service categories."
+    },
+    "/pricingItems/{itemId}": {
+      "schema": { "$ref": "#/entities/PricingItem" },
+      "description": "Transparent rate cards for each category."
+    },
+    "/offers/{offerId}": {
+      "schema": { "$ref": "#/entities/Offer" },
+      "description": "Active promotional offers."
+    },
+    "/professionals/{proId}": {
+      "schema": { "$ref": "#/entities/Professional" },
+      "description": "Public service professional profiles, availability, and live coordinates when online."
+    },
+    "/professionals/{proId}/private/{docId}": {
+      "schema": { "$ref": "#/entities/ProfessionalPrivate" },
+      "description": "Isolated private KYC and phone contact details for professionals."
+    },
+    "/bookings/{bookingId}": {
+      "schema": { "$ref": "#/entities/Booking" },
+      "description": "Home service bookings and live tracking state."
+    },
+    "/bookings/{bookingId}/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/ChatMessage" },
+      "description": "Booking-scoped customer-professional chat messages."
+    },
+    "/reviews/{reviewId}": {
+      "schema": { "$ref": "#/entities/Review" },
+      "description": "Verified customer reviews linked to completed bookings."
+    },
+    "/notifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/Notification" },
+      "description": "User-scoped in-app notifications."
+    },
+    "/complaints/{complaintId}": {
+      "schema": { "$ref": "#/entities/Complaint" },
+      "description": "Customer complaints and support resolutions."
+    },
+    "/payments/{paymentId}": {
+      "schema": { "$ref": "#/entities/Payment" },
+      "description": "Payment and refund ledger."
+    }
+  }
+}

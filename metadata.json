@@ -1,0 +1,6 @@
+{
+  "name": "AF FIXING",
+  "description": "AF FIXING — Find. Book. Fix. Local home services booking platform for verified AC technicians, electricians, plumbers, carpenters, and appliance repair specialists across India.",
+  "requestFramePermissions": ["geolocation", "camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

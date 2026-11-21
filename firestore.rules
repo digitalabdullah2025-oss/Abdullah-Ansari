@@ -1,0 +1,614 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global safety net: deny everything by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Core Primitives ---
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && (
+        request.auth.token.email_verified == true ||
+        request.auth.token.firebase.sign_in_provider == 'phone'
+      );
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        (request.auth.token.email_verified == true && request.auth.token.email == 'digitalabdullah2025@gmail.com') ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isOptionalString(data, field, maxLen) {
+      return !(field in data) || (data[field] is string && data[field].size() <= maxLen);
+    }
+
+    function isOptionalNumber(data, field) {
+      return !(field in data) || data[field] is number;
+    }
+
+    // --- Entity Validators ---
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'displayName', 'role', 'isBlocked', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly([
+          'uid', 'displayName', 'email', 'phone', 'photoURL',
+          'role', 'defaultAddress', 'defaultCity', 'defaultLat', 'defaultLng',
+          'isBlocked', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.uid)
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 120
+        && isOptionalString(data, 'email', 254)
+        && isOptionalString(data, 'phone', 20)
+        && isOptionalString(data, 'photoURL', 500)
+        && data.role in ['customer', 'professional', 'admin']
+        && isOptionalString(data, 'defaultAddress', 300)
+        && isOptionalString(data, 'defaultCity', 80)
+        && isOptionalNumber(data, 'defaultLat')
+        && isOptionalNumber(data, 'defaultLng')
+        && data.isBlocked is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAdmin(data) {
+      return data.keys().hasAll(['uid', 'email', 'createdAt'])
+        && data.keys().hasOnly(['uid', 'email', 'createdAt'])
+        && isValidId(data.uid)
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 254
+        && data.createdAt is timestamp;
+    }
+
+    function isValidServiceCategory(data) {
+      return data.keys().hasAll(['id', 'name', 'iconName', 'baseInspectionFee', 'minEstimate', 'maxEstimate', 'isActive', 'updatedAt'])
+        && data.keys().hasOnly([
+          'id', 'name', 'description', 'iconName', 'baseInspectionFee',
+          'minEstimate', 'maxEstimate', 'isEmergencyEligible', 'isActive', 'sortOrder', 'updatedAt'
+        ])
+        && isValidId(data.id)
+        && data.name is string && data.name.size() >= 2 && data.name.size() <= 80
+        && isOptionalString(data, 'description', 400)
+        && data.iconName is string && data.iconName.size() >= 1 && data.iconName.size() <= 40
+        && data.baseInspectionFee is number && data.baseInspectionFee >= 0
+        && data.minEstimate is number && data.minEstimate >= 0
+        && data.maxEstimate is number && data.maxEstimate >= data.minEstimate
+        && (!('isEmergencyEligible' in data) || data.isEmergencyEligible is bool)
+        && data.isActive is bool
+        && isOptionalNumber(data, 'sortOrder')
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidPricingItem(data) {
+      return data.keys().hasAll(['id', 'categoryId', 'title', 'inspectionFee', 'minPrice', 'maxPrice', 'priceType', 'isActive', 'updatedAt'])
+        && data.keys().hasOnly([
+          'id', 'categoryId', 'title', 'description', 'inspectionFee',
+          'minPrice', 'maxPrice', 'priceType', 'materialNote', 'isActive', 'updatedAt'
+        ])
+        && isValidId(data.id)
+        && isValidId(data.categoryId)
+        && data.title is string && data.title.size() >= 2 && data.title.size() <= 120
+        && isOptionalString(data, 'description', 300)
+        && data.inspectionFee is number && data.inspectionFee >= 0
+        && data.minPrice is number && data.minPrice >= 0
+        && data.maxPrice is number && data.maxPrice >= data.minPrice
+        && data.priceType in ['fixed_range', 'inspection_based']
+        && isOptionalString(data, 'materialNote', 200)
+        && data.isActive is bool
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidOffer(data) {
+      return data.keys().hasAll(['id', 'title', 'code', 'discountAmount', 'discountLabel', 'isActive', 'updatedAt'])
+        && data.keys().hasOnly([
+          'id', 'title', 'code', 'discountAmount', 'discountLabel', 'categoryId', 'isActive', 'updatedAt'
+        ])
+        && isValidId(data.id)
+        && data.title is string && data.title.size() >= 2 && data.title.size() <= 120
+        && data.code is string && data.code.size() >= 2 && data.code.size() <= 30
+        && data.discountAmount is number && data.discountAmount >= 0
+        && data.discountLabel is string && data.discountLabel.size() >= 1 && data.discountLabel.size() <= 60
+        && isOptionalString(data, 'categoryId', 64)
+        && data.isActive is bool
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidProfessional(data) {
+      return data.keys().hasAll([
+          'uid', 'fullName', 'categoryId', 'categoryName', 'experienceYears',
+          'serviceArea', 'inspectionCharge', 'verificationStatus', 'isVerified',
+          'isBlocked', 'availabilityStatus', 'isOnline', 'isSharingLocation',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'uid', 'fullName', 'photoURL', 'categoryId', 'categoryName', 'skills',
+          'experienceYears', 'serviceArea', 'workingHours', 'inspectionCharge',
+          'hourlyRate', 'bio', 'verificationStatus', 'isVerified', 'isBlocked',
+          'availabilityStatus', 'isOnline', 'isSharingLocation', 'lat', 'lng',
+          'ratingAvg', 'reviewCount', 'completedJobs', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.uid)
+        && data.fullName is string && data.fullName.size() >= 2 && data.fullName.size() <= 120
+        && isOptionalString(data, 'photoURL', 500)
+        && isValidId(data.categoryId)
+        && data.categoryName is string && data.categoryName.size() >= 2 && data.categoryName.size() <= 80
+        && (!('skills' in data) || (data.skills is list && data.skills.size() <= 20 && (data.skills.size() == 0 || data.skills[0] is string)))
+        && data.experienceYears is number && data.experienceYears >= 0 && data.experienceYears <= 70
+        && data.serviceArea is string && data.serviceArea.size() >= 2 && data.serviceArea.size() <= 160
+        && isOptionalString(data, 'workingHours', 80)
+        && data.inspectionCharge is number && data.inspectionCharge >= 0
+        && isOptionalNumber(data, 'hourlyRate')
+        && isOptionalString(data, 'bio', 600)
+        && data.verificationStatus in ['pending', 'verified', 'rejected']
+        && data.isVerified is bool
+        && data.isBlocked is bool
+        && data.availabilityStatus in ['Available Now', 'Busy', 'Offline', 'On Another Job']
+        && data.isOnline is bool
+        && data.isSharingLocation is bool
+        && isOptionalNumber(data, 'lat')
+        && isOptionalNumber(data, 'lng')
+        && isOptionalNumber(data, 'ratingAvg')
+        && isOptionalNumber(data, 'reviewCount')
+        && isOptionalNumber(data, 'completedJobs')
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidProfessionalPrivate(data) {
+      return data.keys().hasAll(['uid', 'phone', 'govIdType', 'govIdLast4', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'phone', 'govIdType', 'govIdLast4', 'govIdNote', 'updatedAt'])
+        && isValidId(data.uid)
+        && data.phone is string && data.phone.size() >= 6 && data.phone.size() <= 20
+        && data.govIdType in ['Aadhaar', 'PAN', 'Driving License', 'Voter ID']
+        && data.govIdLast4 is string && data.govIdLast4.size() >= 4 && data.govIdLast4.size() <= 12
+        && isOptionalString(data, 'govIdNote', 200)
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidBooking(data) {
+      return data.keys().hasAll([
+          'id', 'customerId', 'customerName', 'professionalId', 'professionalName',
+          'categoryId', 'categoryName', 'issueTitle', 'address', 'lat', 'lng',
+          'scheduledDate', 'scheduledSlot', 'isEmergency', 'status',
+          'inspectionFee', 'totalEstimated', 'paymentMethod', 'paymentStatus',
+          'isProSharingLocation', 'hasReview', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'customerId', 'customerName', 'customerPhone', 'professionalId',
+          'professionalName', 'professionalPhoto', 'categoryId', 'categoryName',
+          'issueTitle', 'issueDescription', 'issueMediaNames', 'address', 'lat', 'lng',
+          'scheduledDate', 'scheduledSlot', 'isEmergency', 'status',
+          'inspectionFee', 'estimatedLabour', 'estimatedMaterial', 'totalEstimated',
+          'finalAmount', 'paymentMethod', 'paymentStatus', 'invoiceNumber',
+          'proLat', 'proLng', 'isProSharingLocation', 'hasReview',
+          'cancellationReason', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.id)
+        && isValidId(data.customerId)
+        && data.customerName is string && data.customerName.size() >= 1 && data.customerName.size() <= 120
+        && isOptionalString(data, 'customerPhone', 20)
+        && isValidId(data.professionalId)
+        && data.professionalName is string && data.professionalName.size() >= 1 && data.professionalName.size() <= 120
+        && isOptionalString(data, 'professionalPhoto', 500)
+        && isValidId(data.categoryId)
+        && data.categoryName is string && data.categoryName.size() >= 1 && data.categoryName.size() <= 80
+        && data.issueTitle is string && data.issueTitle.size() >= 2 && data.issueTitle.size() <= 160
+        && isOptionalString(data, 'issueDescription', 1200)
+        && (!('issueMediaNames' in data) || (data.issueMediaNames is list && data.issueMediaNames.size() <= 6 && (data.issueMediaNames.size() == 0 || data.issueMediaNames[0] is string)))
+        && data.address is string && data.address.size() >= 3 && data.address.size() <= 300
+        && data.lat is number && data.lng is number
+        && data.scheduledDate is string && data.scheduledDate.size() >= 4 && data.scheduledDate.size() <= 40
+        && data.scheduledSlot is string && data.scheduledSlot.size() >= 2 && data.scheduledSlot.size() <= 60
+        && data.isEmergency is bool
+        && data.status in ['Request Sent', 'Accepted', 'On The Way', 'Arrived', 'Work Started', 'Completed', 'Cancelled', 'Rejected']
+        && data.inspectionFee is number && data.inspectionFee >= 0
+        && isOptionalNumber(data, 'estimatedLabour')
+        && isOptionalNumber(data, 'estimatedMaterial')
+        && data.totalEstimated is number && data.totalEstimated >= 0
+        && isOptionalNumber(data, 'finalAmount')
+        && data.paymentMethod in ['Cash', 'UPI', 'Online']
+        && data.paymentStatus in ['Pending', 'Awaiting Verification', 'Paid', 'Refunded', 'Failed']
+        && isOptionalString(data, 'invoiceNumber', 40)
+        && isOptionalNumber(data, 'proLat')
+        && isOptionalNumber(data, 'proLng')
+        && data.isProSharingLocation is bool
+        && data.hasReview is bool
+        && isOptionalString(data, 'cancellationReason', 300)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidChatMessage(data) {
+      return data.keys().hasAll(['id', 'bookingId', 'senderId', 'senderName', 'senderRole', 'text', 'createdAt'])
+        && data.keys().hasOnly(['id', 'bookingId', 'senderId', 'senderName', 'senderRole', 'text', 'createdAt'])
+        && isValidId(data.id)
+        && isValidId(data.bookingId)
+        && isValidId(data.senderId)
+        && data.senderName is string && data.senderName.size() >= 1 && data.senderName.size() <= 120
+        && data.senderRole in ['customer', 'professional', 'admin']
+        && data.text is string && data.text.size() >= 1 && data.text.size() <= 1000
+        && data.createdAt is timestamp;
+    }
+
+    function isValidReview(data) {
+      return data.keys().hasAll(['id', 'bookingId', 'customerId', 'customerName', 'professionalId', 'categoryId', 'rating', 'comment', 'createdAt'])
+        && data.keys().hasOnly(['id', 'bookingId', 'customerId', 'customerName', 'professionalId', 'categoryId', 'rating', 'comment', 'createdAt'])
+        && isValidId(data.id)
+        && isValidId(data.bookingId)
+        && isValidId(data.customerId)
+        && data.customerName is string && data.customerName.size() >= 1 && data.customerName.size() <= 120
+        && isValidId(data.professionalId)
+        && isValidId(data.categoryId)
+        && data.rating is number && data.rating >= 1 && data.rating <= 5
+        && data.comment is string && data.comment.size() <= 800
+        && data.createdAt is timestamp;
+    }
+
+    function isValidNotification(data) {
+      return data.keys().hasAll(['id', 'userId', 'title', 'body', 'type', 'isRead', 'createdAt'])
+        && data.keys().hasOnly(['id', 'userId', 'title', 'body', 'type', 'bookingId', 'isRead', 'createdAt'])
+        && isValidId(data.id)
+        && isValidId(data.userId)
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 120
+        && data.body is string && data.body.size() >= 1 && data.body.size() <= 400
+        && data.type in ['booking_request', 'booking_accepted', 'booking_rejected', 'on_the_way', 'arrived', 'completed', 'cancelled', 'system']
+        && isOptionalString(data, 'bookingId', 128)
+        && data.isRead is bool
+        && data.createdAt is timestamp;
+    }
+
+    function isValidComplaint(data) {
+      return data.keys().hasAll(['id', 'bookingId', 'customerId', 'customerName', 'subject', 'description', 'status', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'bookingId', 'customerId', 'customerName', 'professionalId', 'subject', 'description', 'status', 'adminNote', 'createdAt', 'updatedAt'])
+        && isValidId(data.id)
+        && isValidId(data.bookingId)
+        && isValidId(data.customerId)
+        && data.customerName is string && data.customerName.size() >= 1 && data.customerName.size() <= 120
+        && isOptionalString(data, 'professionalId', 128)
+        && data.subject is string && data.subject.size() >= 2 && data.subject.size() <= 160
+        && data.description is string && data.description.size() >= 5 && data.description.size() <= 1000
+        && data.status in ['Open', 'In Review', 'Resolved']
+        && isOptionalString(data, 'adminNote', 500)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidPayment(data) {
+      return data.keys().hasAll(['id', 'bookingId', 'customerId', 'professionalId', 'amount', 'method', 'status', 'invoiceNumber', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'bookingId', 'customerId', 'professionalId', 'amount', 'method', 'status', 'invoiceNumber', 'createdAt', 'updatedAt'])
+        && isValidId(data.id)
+        && isValidId(data.bookingId)
+        && isValidId(data.customerId)
+        && isValidId(data.professionalId)
+        && data.amount is number && data.amount >= 0
+        && data.method in ['Cash', 'UPI', 'Online']
+        && data.status in ['Pending', 'Awaiting Verification', 'Paid', 'Refund Requested', 'Refunded']
+        && data.invoiceNumber is string && data.invoiceNumber.size() >= 2 && data.invoiceNumber.size() <= 40
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    // --- Collection Rules ---
+
+    // 1. Users (PII isolated to owner or admin)
+    match /users/{userId} {
+      allow get: if isValidId(userId) && isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isValidId(userId)
+        && isVerifiedUser()
+        && isValidUser(incoming())
+        && request.auth.uid == userId
+        && incoming().uid == request.auth.uid
+        && incoming().role in ['customer', 'professional']
+        && incoming().isBlocked == false
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(userId)
+        && isVerifiedUser()
+        && isValidUser(incoming())
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (
+            request.auth.uid == userId
+            && existing().isBlocked == false
+            && incoming().role in ['customer', 'professional']
+            && incoming().isBlocked == existing().isBlocked
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'displayName', 'email', 'phone', 'photoURL', 'role',
+              'defaultAddress', 'defaultCity', 'defaultLat', 'defaultLng', 'updatedAt'
+            ])
+          )
+        );
+      allow delete: if isValidId(userId) && isAdmin();
+    }
+
+    // 2. Admins
+    match /admins/{userId} {
+      allow get: if isValidId(userId) && (request.auth.uid == userId || isAdmin());
+      allow list: if isAdmin();
+      allow create, update: if isValidId(userId) && isAdmin() && isValidAdmin(incoming());
+      allow delete: if isValidId(userId) && isAdmin();
+    }
+
+    // 3. Public Service Catalog, Pricing & Offers (Read by anyone, written only by Admin)
+    match /serviceCategories/{categoryId} {
+      allow get: if isValidId(categoryId);
+      allow list: if true;
+      allow create, update: if isValidId(categoryId) && isAdmin() && isValidServiceCategory(incoming()) && incoming().updatedAt == request.time;
+      allow delete: if isValidId(categoryId) && isAdmin();
+    }
+
+    match /pricingItems/{itemId} {
+      allow get: if isValidId(itemId);
+      allow list: if true;
+      allow create, update: if isValidId(itemId) && isAdmin() && isValidPricingItem(incoming()) && incoming().updatedAt == request.time;
+      allow delete: if isValidId(itemId) && isAdmin();
+    }
+
+    match /offers/{offerId} {
+      allow get: if isValidId(offerId);
+      allow list: if true;
+      allow create, update: if isValidId(offerId) && isAdmin() && isValidOffer(incoming()) && incoming().updatedAt == request.time;
+      allow delete: if isValidId(offerId) && isAdmin();
+    }
+
+    // 4. Professionals (Public directory info without sensitive KYC/phone)
+    match /professionals/{proId} {
+      allow get: if isValidId(proId);
+      allow list: if resource.data.isBlocked == false || isAdmin() || (isSignedIn() && resource.data.uid == request.auth.uid);
+      allow create: if isValidId(proId)
+        && isVerifiedUser()
+        && isValidProfessional(incoming())
+        && request.auth.uid == proId
+        && incoming().uid == request.auth.uid
+        && incoming().verificationStatus == 'pending'
+        && incoming().isVerified == false
+        && incoming().isBlocked == false
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(proId)
+        && isVerifiedUser()
+        && isValidProfessional(incoming())
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (
+            request.auth.uid == proId
+            && existing().isBlocked == false
+            && incoming().verificationStatus == existing().verificationStatus
+            && incoming().isVerified == existing().isVerified
+            && incoming().isBlocked == existing().isBlocked
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'fullName', 'photoURL', 'categoryId', 'categoryName', 'skills',
+              'experienceYears', 'serviceArea', 'workingHours', 'inspectionCharge',
+              'hourlyRate', 'bio', 'availabilityStatus', 'isOnline',
+              'isSharingLocation', 'lat', 'lng', 'updatedAt'
+            ])
+          )
+        );
+      allow delete: if isValidId(proId) && isAdmin();
+
+      // Isolated Private KYC & Contact Subcollection
+      match /private/{docId} {
+        allow get: if isValidId(proId) && isValidId(docId) && isSignedIn() && (request.auth.uid == proId || isAdmin());
+        allow list: if isSignedIn() && (request.auth.uid == proId || isAdmin());
+        allow create, update: if isValidId(proId)
+          && isValidId(docId)
+          && isVerifiedUser()
+          && isValidProfessionalPrivate(incoming())
+          && (request.auth.uid == proId || isAdmin())
+          && incoming().uid == proId
+          && incoming().updatedAt == request.time;
+        allow delete: if isValidId(proId) && isValidId(docId) && isAdmin();
+      }
+    }
+
+    // 5. Bookings
+    match /bookings/{bookingId} {
+      allow get: if isValidId(bookingId) && isSignedIn() && (
+        resource.data.customerId == request.auth.uid ||
+        resource.data.professionalId == request.auth.uid ||
+        isAdmin()
+      );
+      allow list: if isSignedIn() && (
+        resource.data.customerId == request.auth.uid ||
+        resource.data.professionalId == request.auth.uid ||
+        isAdmin()
+      );
+      allow create: if isValidId(bookingId)
+        && isVerifiedUser()
+        && isValidBooking(incoming())
+        && incoming().id == bookingId
+        && incoming().customerId == request.auth.uid
+        && incoming().status == 'Request Sent'
+        && incoming().hasReview == false
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/professionals/$(incoming().professionalId));
+      allow update: if isValidId(bookingId)
+        && isVerifiedUser()
+        && isValidBooking(incoming())
+        && incoming().id == existing().id
+        && incoming().customerId == existing().customerId
+        && incoming().professionalId == existing().professionalId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          // Customer action: Cancel or Reschedule before completion
+          (
+            request.auth.uid == existing().customerId
+            && !(existing().status in ['Completed', 'Cancelled', 'Rejected'])
+            && incoming().status in [existing().status, 'Cancelled']
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'status', 'scheduledDate', 'scheduledSlot', 'cancellationReason', 'paymentMethod', 'updatedAt'
+            ])
+          ) ||
+          // Customer action: Mark booking as reviewed after completion
+          (
+            request.auth.uid == existing().customerId
+            && existing().status == 'Completed'
+            && existing().hasReview == false
+            && incoming().hasReview == true
+            && incoming().diff(existing()).affectedKeys().hasOnly(['hasReview', 'updatedAt'])
+          ) ||
+          // Professional action: Accept, Reject, Progress Status, Share Live GPS, Update Final Amount / Cash Payment
+          (
+            request.auth.uid == existing().professionalId
+            && !(existing().status in ['Completed', 'Cancelled', 'Rejected'])
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'status', 'proLat', 'proLng', 'isProSharingLocation',
+              'finalAmount', 'paymentStatus', 'updatedAt'
+            ])
+          )
+        );
+      allow delete: if isValidId(bookingId) && isAdmin();
+
+      // Master Gate Chat Subcollection
+      match /messages/{messageId} {
+        function isBookingParticipant() {
+          let b = get(/databases/$(database)/documents/bookings/$(bookingId)).data;
+          return b.customerId == request.auth.uid || b.professionalId == request.auth.uid;
+        }
+        allow get: if isValidId(bookingId) && isValidId(messageId) && isSignedIn() && (isBookingParticipant() || isAdmin());
+        allow list: if isValidId(bookingId) && isSignedIn() && (isBookingParticipant() || isAdmin());
+        allow create: if isValidId(bookingId)
+          && isValidId(messageId)
+          && isVerifiedUser()
+          && isValidChatMessage(incoming())
+          && incoming().id == messageId
+          && incoming().bookingId == bookingId
+          && incoming().senderId == request.auth.uid
+          && incoming().createdAt == request.time
+          && (isBookingParticipant() || isAdmin());
+        allow update, delete: if false;
+      }
+    }
+
+    // 6. Reviews (Only for verified completed bookings owned by customer, single review per booking)
+    match /reviews/{reviewId} {
+      allow get: if isValidId(reviewId);
+      allow list: if true;
+      allow create: if isValidId(reviewId)
+        && isVerifiedUser()
+        && isValidReview(incoming())
+        && incoming().id == reviewId
+        && incoming().customerId == request.auth.uid
+        && incoming().createdAt == request.time
+        && get(/databases/$(database)/documents/bookings/$(incoming().bookingId)).data.customerId == request.auth.uid
+        && get(/databases/$(database)/documents/bookings/$(incoming().bookingId)).data.status == 'Completed'
+        && get(/databases/$(database)/documents/bookings/$(incoming().bookingId)).data.hasReview == false;
+      allow update, delete: if isValidId(reviewId) && isAdmin();
+    }
+
+    // 7. Notifications
+    match /notifications/{notificationId} {
+      allow get: if isValidId(notificationId) && isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isValidId(notificationId)
+        && isVerifiedUser()
+        && isValidNotification(incoming())
+        && incoming().id == notificationId
+        && incoming().isRead == false
+        && incoming().createdAt == request.time;
+      allow update: if isValidId(notificationId)
+        && isSignedIn()
+        && isValidNotification(incoming())
+        && resource.data.userId == request.auth.uid
+        && incoming().userId == existing().userId
+        && incoming().createdAt == existing().createdAt
+        && incoming().diff(existing()).affectedKeys().hasOnly(['isRead']);
+      allow delete: if isValidId(notificationId) && isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+    }
+
+    // 8. Complaints
+    match /complaints/{complaintId} {
+      allow get: if isValidId(complaintId) && isSignedIn() && (resource.data.customerId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.customerId == request.auth.uid || isAdmin());
+      allow create: if isValidId(complaintId)
+        && isVerifiedUser()
+        && isValidComplaint(incoming())
+        && incoming().id == complaintId
+        && incoming().customerId == request.auth.uid
+        && incoming().status == 'Open'
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(complaintId)
+        && isAdmin()
+        && isValidComplaint(incoming())
+        && incoming().updatedAt == request.time;
+      allow delete: if isValidId(complaintId) && isAdmin();
+    }
+
+    // 9. Payments
+    match /payments/{paymentId} {
+      allow get: if isValidId(paymentId) && isSignedIn() && (
+        resource.data.customerId == request.auth.uid ||
+        resource.data.professionalId == request.auth.uid ||
+        isAdmin()
+      );
+      allow list: if isSignedIn() && (
+        resource.data.customerId == request.auth.uid ||
+        resource.data.professionalId == request.auth.uid ||
+        isAdmin()
+      );
+      allow create: if isValidId(paymentId)
+        && isVerifiedUser()
+        && isValidPayment(incoming())
+        && incoming().id == paymentId
+        && incoming().customerId == request.auth.uid
+        && incoming().status in ['Pending', 'Awaiting Verification']
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(paymentId)
+        && isVerifiedUser()
+        && isValidPayment(incoming())
+        && incoming().id == existing().id
+        && incoming().bookingId == existing().bookingId
+        && incoming().customerId == existing().customerId
+        && incoming().professionalId == existing().professionalId
+        && incoming().method == existing().method
+        && incoming().invoiceNumber == existing().invoiceNumber
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (
+            request.auth.uid == existing().professionalId
+            && !(existing().status in ['Paid', 'Refunded'])
+            && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'amount', 'updatedAt'])
+          ) ||
+          (
+            request.auth.uid == existing().customerId
+            && existing().status == 'Paid'
+            && incoming().status == 'Refund Requested'
+            && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+          )
+        );
+      allow delete: if isValidId(paymentId) && isAdmin();
+    }
+  }
+}
